@@ -1,39 +1,59 @@
 import telebot
 from telebot import types
+import requests
 
-bot = telebot.TeleBot('6713450515:AAE-43LZ7Lc6D58JbnrnSP-koF9hU9lX39A')
 
-def send_fuck_audio(message):
-  audio = open(r'/Users/mtfild/Downloads/idi-nakhui-suka_9p27MbW.mp3', 'rb')
-  bot.send_audio(message.chat.id, audio)
-  audio.close()
-  
+BOT_TOKEN = '6713450515:AAE-43LZ7Lc6D58JbnrnSP-koF9hU9lX39A'
+WEATHER_API = 'ec1640fb5299f4bfed850744e0d1a2cf'
+bot = telebot.TeleBot(BOT_TOKEN)
+
+@bot.message_handler(commands=['start'])
 def send_greeting(message): 
-  last_name = message.from_user.last_name if message.from_user.last_name else ''
-  greeting = f'Дарова, {message.from_user.first_name} {last_name}'.strip()
-  bot.send_message(message.chat.id, f'{greeting}, пошли меня нахуй')
+  markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+  button_geo = types.KeyboardButton(text="Отправить геолокацию", request_location=True)
+  button_msk = types.KeyboardButton(text='Москва')
+  button_sbp = types.KeyboardButton(text='Санкт-Петербург')
+  button_ekb = types.KeyboardButton(text='Екатеринбург')
+  markup.row(button_msk,button_sbp, button_ekb)
+  markup.row(button_geo)
+  bot.send_message(message.chat.id, "Привет! Выберите город или нажмите кнопку ниже, чтобы отправить свою геолокацию, либо введите название города.", reply_markup=markup)
 
-@bot.message_handler(commands=['start', 'main', 'hello'])
-
-def start_message(message):
-  send_greeting(message)
-
-@bot.message_handler(commands=['help'])
-
-def help_message(message):
-  bot.send_message(message.chat.id,"<strong>Че помощь нужна?</strong>", parse_mode='html')
-
-@bot.message_handler(commands=['fuck'])
-
-def send_audio(message):
-  send_fuck_audio(message)
-
-@bot.message_handler()
-
-def info(message):
-  if message.text.lower() == 'привет':
-    send_greeting(message)
-  elif message.text.lower() == 'пошел нахуй':
-    send_fuck_audio(message)
+def get_weather(latitude, longitude, api_key):
+  url = f"https://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitude}&appid={api_key}&units=metric&lang=ru"
+  response = requests.get(url)
+  print(response.json())
+  data = response.json()
+  if response.status_code == 200:
+      weather = data['weather'][0]['description']
+      temperature = data['main']['temp']
+      feels_like = data['main']['feels_like']
+      return f"Погода: {weather}, Температура: {temperature}°C, ощущается как {feels_like}°C"
+  else:
+      return "Ошибка получения данных о погоде."
     
+def get_weather_by_city(city_name, api_key):
+    url = f"http://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={api_key}&units=metric&lang=ru"
+    response = requests.get(url)
+    data = response.json()
+    if response.status_code == 200:
+        weather = data['weather'][0]['description']
+        temperature = data['main']['temp']
+        feels_like = data['main']['feels_like']
+        return f"Погода в {city_name.title()}: {weather}, Температура: {temperature}°C, Ощущается как {feels_like}°C"
+    else:
+        return "Ошибка получения данных о погоде. Проверьте название города."
+
+@bot.message_handler(func=lambda message: True, content_types=['text'])
+def handle_text(message):
+    city = message.text
+    weather_info = get_weather_by_city(city, WEATHER_API)
+    bot.send_message(message.chat.id, weather_info)
+
+@bot.message_handler(content_types=['location'])
+def handle_location(message):
+    if message.location:
+        weather_info = get_weather(message.location.latitude, message.location.longitude, WEATHER_API)
+        bot.send_message(message.chat.id, weather_info)  
+      
+
 bot.polling(non_stop=True)
